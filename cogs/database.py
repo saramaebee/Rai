@@ -1,3 +1,5 @@
+import concurrent.futures
+
 import discord
 from discord.ext import commands, tasks
 from .utils import helper_functions as hf
@@ -6,7 +8,6 @@ import os
 import asyncio
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-_loop = asyncio.get_event_loop()
 
 
 def open_database():
@@ -20,17 +21,19 @@ class Database(commands.Cog):
         self.bot = bot
         self.db = open_database()
         self.queue = self.task = None
-        asyncio.run(self.queue_setup())
+        self.loop = asyncio.get_event_loop()
         if not self.save_sqlite_db.is_running():
             self.save_sqlite_db.start()
 
     async def queue_setup(self):
+        print("queue before", self.queue)
         self.queue = asyncio.Queue()
-        self.task = await asyncio.create_task(self.worker("Busy boy", self.queue))
+        print("queue after", self.queue)
+        self.task = self.loop.create_task(self.worker("Busy boy", self.queue))
+        print("queue final")
 
-    async def cog_unload(self):
+    def cog_unload(self):
         self.task.cancel()
-        await asyncio.gather(self.task, return_exceptions=True)
         # src: https://docs.python.org/3/library/asyncio-queue.html
 
     @tasks.loop(minutes=5.0)
@@ -42,30 +45,37 @@ class Database(commands.Cog):
         try:
             result = c.execute(query)
             self.db.commit()
-            print(0)
         except Exception as e:
             result = e
         return result
 
+    # Currently not using, this is old code
     async def _access_db(self, query):
         return self.db.execute(query).fetchall()  # potential for SQL injection?
 
+    # Currently not using, this is old code
     async def access_db(self, query):  # run access to db as a
-        return _loop.run_until_complete(self._access_db(query))
+        return self.loop.run_until_complete(self._access_db(query))
 
-    def add_to_queue(self, query):
-        self.queue.put(query)
+    async def add_to_queue(self, query):
+        if not self.queue:
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                blocking = [await self.loop.run_in_executor(pool, self.queue_setup)]
+                completed, pending = await asyncio.wait(blocking)
+                result = [t.result() for t in completed][0]
+                print("after blocking", result)
+        await self.queue.put(query)
 
     @commands.command()
     @commands.is_owner()
     async def sql(self, ctx, *, query):
-        self.add_to_queue(query)
+        await self.add_to_queue(query)
 
     async def worker(self, name, queue):
         while True:
             # Get a sql command out of the queue
             try:
-                query = await queue.get_nowait()
+                query = queue.get_nowait()
             except asyncio.QueueEmpty:
                 # Wait a bit if queue is empty
                 await asyncio.sleep(1)
