@@ -29,11 +29,36 @@ intents.members = True
 intents.message_content = True
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
+try:
+    with open(f"{dir_path}/.env", 'r') as f:
+        pass
+except FileNotFoundError:
+    txt = """BOT_TOKEN=\nGCSE_API=\nTRACEBACK_LOGGING_CHANNEL=\nBOT_TEST_CHANNEL="""
+    with open(f'{dir_path}/.env', 'w') as f:
+        f.write(txt)
+    print("I've created a .env file for you, go in there and put your bot token in the file, as well as a channel "
+          "for tracebacks and logging, put channel IDs in those.\n"
+          "There is also a spot for your GCSE api key if you have one, \n"
+          "but if you don't you can leave that blank.")
+    exit()
+
+# Credentials
+load_dotenv('.env')
+
+if not os.getenv("BOT_TOKEN"):
+    raise discord.LoginFailure("You need to add your bot token to the .env file in your bot folder.")
+if not os.getenv("TRACEBACK_LOGGING_CHANNEL") or not os.getenv("BOT_TEST_CHANNEL"):
+    raise discord.LoginFailure("Add the IDs for a logging channel and a tracebacks channel into the .env file "
+                               "in your bot folder.")
+
 # Change these two values to channel IDs in your testing server if you are forking the bot
-TRACEBACK_LOGGING_CHANNEL = 554572239836545074
-BOT_TEST_CHANNEL = 304110816607862785
+TRACEBACK_LOGGING_CHANNEL = int(os.getenv("TRACEBACK_LOGGING_CHANNEL"))
+BOT_TEST_CHANNEL = int(os.getenv("BOT_TEST_CHANNEL"))
 
 t_start = datetime.now()
+
+# Don't change this even on forked copies of Rai
+RYRY_RAI_COPY = 270366726737231884
 
 
 def prefix(bot, msg):
@@ -49,7 +74,7 @@ def prefix(bot, msg):
 
 class Rai(Bot):
     def __init__(self):
-        super().__init__(description="Bot by Ryry013#9234", command_prefix=prefix, owner_id=202995638860906496,
+        super().__init__(description="Bot by Ryry013#9234", command_prefix=prefix,
                          help_command=None, intents=intents, max_messages=10000)
         self.language_detection = False
         print('starting loading of jsons')
@@ -113,8 +138,14 @@ class Rai(Bot):
                 continue
 
     async def on_ready(self):
-        await hf.load_language_dection_model()
+        await hf.load_language_detection_model()
         self.language_detection = True
+
+        try:
+            AppInfo = await self.application_info()
+            self.owner_id = AppInfo.owner.id
+        except discord.HTTPException:
+            pass
 
         test_channel = self.get_channel(BOT_TEST_CHANNEL)
 
@@ -140,7 +171,74 @@ class Rai(Bot):
 
         await self.change_presence(activity=discord.Game(';help for help'))
 
-        self.database_backups.start()
+        guilds = [189571157446492161, 243838819743432704, 275146036178059265]
+        for guild in guilds:
+            if guild not in [g.id for g in self.guilds]:
+                guilds.remove(guild)
+
+        if guilds:
+            @self.message_command(name="Delete message", guild_ids=guilds)
+            async def delete_and_log(ctx, message: discord.Message):
+                delete = ctx.bot.get_command("delete")
+                try:
+                    if await delete.can_run(ctx):
+                        await delete.__call__(ctx, str(message.id))
+                        await ctx.interaction.response.send_message("The message has been successfully deleted",
+                                                                    ephemeral=True)
+                    else:
+                        await ctx.interaction.response.send_message("You don't have the permission to use that command",
+                                                                    ephemeral=True)
+                except commands.BotMissingPermissions:
+                    await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
+                                                                ephemeral=True)
+
+            @self.message_command(name="1h text/voice mute", guild_ids=guilds)
+            async def context_message_mute(ctx, message: discord.Message):
+                mute = ctx.bot.get_command("mute")
+                ctx.message = ctx.channel.last_message
+
+                try:
+                    if await mute.can_run(ctx):
+                        await mute.__call__(ctx, args=f"{str(message.author.id)} 1h")
+                        await ctx.interaction.response.send_message("Command completed", ephemeral=True)
+
+                    else:
+                        await ctx.interaction.response.send_message("You don't have the permission to use that command",
+                                                                    ephemeral=True)
+                except commands.BotMissingPermissions:
+                    await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
+                                                                ephemeral=True)
+
+            @self.user_command(name="1h text/voice mute", guild_ids=guilds)
+            async def context_user_mute(ctx, member: discord.Member):
+                mute = ctx.bot.get_command("mute")
+                ctx.message = ctx.channel.last_message
+
+                try:
+                    if await mute.can_run(ctx):
+                        await mute.__call__(ctx, args=f"{str(member.id)} 1h")
+                        await ctx.interaction.response.send_message("Command completed", ephemeral=True)
+
+                    else:
+                        await ctx.interaction.response.send_message("You don't have the permission to use that command",
+                                                                    ephemeral=True)
+                except commands.BotMissingPermissions:
+                    await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
+                                                                ephemeral=True)
+
+            """
+            @bot.message_command(name="Ban and clear3", check=hf.admin_check)  # creates a global message command
+            async def ban_and_clear(ctx, message: discord.Message):  # message commands return the message
+                ban = ctx.bot.get_command("ban")
+                if await ban.can_run(ctx):
+                    await ban.__call__(ctx, args=f"{str(message.author.id)} ⁣")  # invisible character to trigger ban shortcut
+                    await ctx.interaction.response.send_message("The message has been successfully deleted", ephemeral=True)
+                else:
+                    await ctx.interaction.response.send_message("You don't have the permission to use that command", ephemeral=True)
+            """
+
+        if not self.database_backups.is_running():
+            self.database_backups.start()
 
     @tasks.loop(hours=24)
     async def database_backups(self):
@@ -199,10 +297,10 @@ class Rai(Bot):
             command = ctx.command.qualified_name
             try:
                 await ctx.send(f"I couldn't execute the command.  I probably have a bug.  "
-                               f"This has been reported to Ryan.")
+                               f"This has been reported to the bot owner.")
             except discord.Forbidden:
                 await ctx.author.send(f"I tried doing something but I lack permissions to send messages.  "
-                                      f"I probably have a bug.  This has been reported to Ryan.")
+                                      f"I probably have a bug.  This has been reported to the bot owner.")
             pass
 
         elif isinstance(error, commands.CommandNotFound):
@@ -268,7 +366,7 @@ class Rai(Bot):
             return
 
         elif isinstance(error, commands.NotOwner):
-            await ctx.send(f"Only Ryan can do that.")
+            await ctx.send(f"Only the bot owner can do that.")
             return
 
         print(datetime.now())
@@ -322,96 +420,13 @@ class Rai(Bot):
 
 
 bot = Rai()
-guilds = [189571157446492161, 243838819743432704, 275146036178059265]
-# There will be a discord.errors.Forbidden error here if you do not have these guilds on your bot
-
-
-@bot.message_command(name="Delete message", guild_ids=guilds)
-async def delete_and_log(ctx, message: discord.Message):
-    delete = ctx.bot.get_command("delete")
-    try:
-        if await delete.can_run(ctx):
-            await delete.__call__(ctx, str(message.id))
-            await ctx.interaction.response.send_message("The message has been successfully deleted", ephemeral=True)
-        else:
-            await ctx.interaction.response.send_message("You don't have the permission to use that command",
-                                                        ephemeral=True)
-    except commands.BotMissingPermissions:
-        await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
-                                                    ephemeral=True)
-
-
-@bot.message_command(name="1h text/voice mute", guild_ids=guilds)
-async def context_message_mute(ctx, message: discord.Message):
-    mute = ctx.bot.get_command("mute")
-    ctx.message = ctx.channel.last_message
-
-    try:
-        if await mute.can_run(ctx):
-            await mute.__call__(ctx, args=f"{str(message.author.id)} 1h")
-            await ctx.interaction.response.send_message("Command completed", ephemeral=True)
-
-        else:
-            await ctx.interaction.response.send_message("You don't have the permission to use that command",
-                                                        ephemeral=True)
-    except commands.BotMissingPermissions:
-        await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
-                                                    ephemeral=True)
-
-
-@bot.user_command(name="1h text/voice mute", guild_ids=guilds)
-async def context_user_mute(ctx, member: discord.Member):
-    mute = ctx.bot.get_command("mute")
-    ctx.message = ctx.channel.last_message
-
-    try:
-        if await mute.can_run(ctx):
-            await mute.__call__(ctx, args=f"{str(member.id)} 1h")
-            await ctx.interaction.response.send_message("Command completed", ephemeral=True)
-
-        else:
-            await ctx.interaction.response.send_message("You don't have the permission to use that command",
-                                                        ephemeral=True)
-    except commands.BotMissingPermissions:
-        await ctx.interaction.response.send_message("The bot is missing permissions here to use that command.",
-                                                    ephemeral=True)
-
-
-"""
-@bot.message_command(name="Ban and clear3", check=hf.admin_check)  # creates a global message command
-async def ban_and_clear(ctx, message: discord.Message):  # message commands return the message
-    ban = ctx.bot.get_command("ban")
-    if await ban.can_run(ctx):
-        await ban.__call__(ctx, args=f"{str(message.author.id)} ⁣")  # invisible character to trigger ban shortcut
-        await ctx.interaction.response.send_message("The message has been successfully deleted", ephemeral=True)
-    else:
-        await ctx.interaction.response.send_message("You don't have the permission to use that command", ephemeral=True)
-"""
-
-try:
-    with open(f"{dir_path}/.env", 'r') as f:
-        pass
-except FileNotFoundError:
-    txt = """BOT_TOKEN=\nGCSE_API="""
-    with open(f'{dir_path}/.env', 'w') as f:
-        f.write(txt)
-    print("I've created a .env file for you, go in there and put your bot token in the file.\n"
-          "There is also a spot for your GCSE api key if you have one, \n"
-          "but if you don't you can leave that blank.")
-    exit()
-
-# Credentials
-load_dotenv('.env')
-
-if not os.getenv("BOT_TOKEN"):
-    raise discord.LoginFailure("You need to add your bot token to the .env file in your bot folder.")
 
 # A little bit of a detterent from my token instantly being used if the .env file gets leaked somehow
 if "Rai" == os.path.basename(dir_path) and "Ryry013" in dir_path:
     bot.run(os.getenv("BOT_TOKEN") + 'k')  # Rai
 elif "ForkedRai" == os.path.basename(dir_path) and "Ryry013" in dir_path:
-    bot.run(os.getenv("BOT_TOKEN") + '4')  # Rai
-elif "Local" in os.path.basename(dir_path) and "Ryry013" in dir_path:
-    bot.run(os.getenv("BOT_TOKEN") + '4')  # Rai Test
+    bot.run(os.getenv("BOT_TOKEN") + 'M')  # Rai
+elif "local" in os.path.basename(dir_path):
+    bot.run(os.getenv("BOT_TOKEN") + 'M')  # Rai Test
 else:
     bot.run(os.getenv("BOT_TOKEN"))  # For other people forking Rai bot
