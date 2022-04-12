@@ -1,3 +1,4 @@
+import sqlite3
 import urllib
 from typing import Optional, List
 
@@ -76,6 +77,30 @@ class General(commands.Cog):
             return
 
         ##########################################
+
+        async def add_to_cache():
+            escaped_string = msg.content.replace("'", "''")
+            insertion_query = f"INSERT INTO Messages VALUES ({msg.guild.id}, {msg.id}, "\
+            f"{msg.created_at.timestamp()}, '{escaped_string}')"
+            print(0, insertion_query)
+            database = self.bot.get_cog("Database")
+            try:
+                result = await database.access_db(insertion_query)
+                print(1, result)
+            except sqlite3.OperationalError as e:
+                print(2, e, str(e), str(e).startswith('no such table'))
+                if str(e).startswith('no such table'):
+                    creation_query = """CREATE TABLE Messages (
+                    message_id int NOT NULL,
+                    channel_id int NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    content VARCHAR(2000))"""
+                    print(3, creation_query)
+                    result = await database.access_db(creation_query)
+                    print(4, result)
+                    result = await database.access_db(insertion_query)
+                    print(5, result)
+        await add_to_cache()
 
         # ### BurdBot's window to open questions in #audio_of_the_week
         async def burdbot_window():
