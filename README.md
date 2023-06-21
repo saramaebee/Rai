@@ -1,4 +1,6 @@
 # -Rai-
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsaramaebee%2FRai.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsaramaebee%2FRai?ref=badge_shield)
+
 Discord bot for Discord language servers (Python).  Some key features: 
 - Extensive logging of joins, leaves, bans, deletes, edits, reaction removes, and invites that people use to join a server
 - A report room for users to make either anonymous reports to mods or enter a mod report chat room to discuss an issue.  Designed to eliminate the need for private messages completely from mod business.  
@@ -255,3 +257,7 @@ __Other commands__
 - `;question open <Message ID of message log>` - Reopens a closed question  
 - `;question list` - Shows a list of all open questions
 - `;question bump <message_id>` Bumps a question in the question log to the bottom of the log channel
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fsaramaebee%2FRai.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fsaramaebee%2FRai?ref=badge_large)
